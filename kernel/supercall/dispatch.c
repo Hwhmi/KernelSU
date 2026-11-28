@@ -1148,6 +1148,12 @@ int ksu_handle_susfs_cmd(unsigned int cmd, void __user **arg)
         susfs_set_uname(arg);
         return 0;
     }
+    /* 4.14 SUSFS port: /proc/version consistency (CMD 0x55591).
+     * Upstream BakaSU does not forward this one yet. */
+    case CMD_SUSFS_SET_PROC_VERSION: {
+        susfs_set_proc_version(arg);
+        return 0;
+    }
 #endif //#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
 #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
     case CMD_SUSFS_ENABLE_LOG: {
@@ -1520,6 +1526,17 @@ long ksu_supercall_handle_ioctl(const struct file *filp, unsigned int cmd, void 
 
 #ifdef CONFIG_KSU_DEBUG
     pr_info("ksu ioctl: cmd=0x%x from uid=%d\n", cmd, ksu_get_uid_t(current_uid()));
+#endif
+
+#ifdef CONFIG_KSU_SUSFS
+    /* SUSFS commands are plain 0x55550..0x60030 numbers rather than
+     * _IOC()-encoded ioctls; serve them before walking the table so the
+     * ioctl path works even if the sys_reboot hook is not installed. */
+    if (cmd >= CMD_SUSFS_ADD_SUS_PATH && cmd <= CMD_SUSFS_SET_PRIORITY_UID_FILTER) {
+        if (ksu_get_uid_t(current_uid()) != 0)
+            return -EPERM;
+        return ksu_handle_susfs_cmd(cmd, &argp);
+    }
 #endif
 
     for (i = 0; ksu_ioctl_handlers[i].handler; i++) {
